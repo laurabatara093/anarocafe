@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Advanced Stick Defense</title>
+  <style>
+    :root{
+      --bg1:#0f1226; --bg2:#1a2340;
+      --glass:rgba(255,255,255,0.06);
+      --text:#eef2ff; --muted:#b7c0e6;
+      --acc:#ffd700; --cta:#ff7a59;
+      --sd:0 6px 16px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .header{display:flex;align-items:center;justify-content:space-between;background:var(--glass);backdrop-filter:blur(10px);padding:12px 16px;border-radius:14px;box-shadow:var(--sd);margin-bottom:16px}
+    .title{font-weight:700;letter-spacing:.5px}
+    .hud{display:flex;gap:12px;flex-wrap:wrap}
+    .chip{background:var(--glass);padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.08)}
+    .grid{display:flex;gap:16px;flex-wrap:wrap}
+    .left{flex:2;min-width:560px}
+    .right{flex:1;min-width:300px;background:var(--glass);backdrop-filter:blur(10px);border-radius:14px;box-shadow:var(--sd);padding:16px;max-height:560px;overflow:auto}
+    canvas{display:block;width:100%;border-radius:12px;box-shadow:var(--sd);border:2px solid rgba(255,255,255,.08);background:#0a1024}
+    .progress{height:14px;background:rgba(255,255,255,.08);border-radius:999px;margin-top:10px;overflow:hidden}
+    .bar{height:100%;width:0%;background:linear-gradient(90deg,#ff6b6b,var(--acc))}
+    .sec{margin:14px 0}
+    .sec h3{font-size:14px;margin-bottom:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+    .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .stat{background:rgba(255,255,255,.06);padding:10px;border-radius:10px;text-align:center;font-weight:600}
+    .item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.06);padding:8px 10px;border-radius:10px;margin-bottom:8px}
+    button{background:linear-gradient(45deg,#ff6b6b,#ee5a24);border:none;color:#fff;font-weight:700;border-radius:999px;padding:8px 12px;cursor:pointer;box-shadow:var(--sd)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:1000}
+    .card{background:linear-gradient(180deg,#273055,#1a2342);padding:24px;border-radius:16px;box-shadow:var(--sd);text-align:center;min-width:280px}
+    @media (max-width:900px){
+      .left{min-width:100%}
+      .right{min-width:100%;max-height:none}
+      canvas{height:300px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <div class="title">⚔️ Advanced Stick Defense</div>
+      <div class="hud">
+        <div class="chip">Wave: <span id="hudWave">1</span></div>
+        <div class="chip">Level: <span id="hudLevel">1</span></div>
+        <div class="chip">Gold: <span id="hudGold">200</span></div>
+        <div class="chip">HP: <span id="hudHp">100/100</span></div>
+        <div class="chip">Score: <span id="hudScore">0</span></div>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="left">
+        <canvas id="game" width="800" height="500"></canvas>
+        <div class="progress"><div id="waveBar" class="bar"></div></div>
+      </section>
+
+      <aside class="right">
+        <div class="sec" id="levelInfo">
+          <h3>Level info</h3>
+          <div>🏰 <span id="levelName">Level Name</span></div>
+          <div>Wave <span id="levelWaveCur">1</span>/<span id="levelWaveMax">5</span></div>
+          <div id="bossHint" style="margin-top:6px;color:#ffbebe;"></div>
+        </div>
+
+        <div class="sec">
+          <h3>Stats</h3>
+          <div class="stats">
+            <div class="stat">💰 <span id="statGold">200</span></div>
+            <div class="stat">❤️ <span id="statHp">100/100</span></div>
+            <div class="stat">⭐ <span id="statScore">0</span></div>
+            <div class="stat">👹 <span id="statEnemies">0</span></div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h3>Wave control</h3>
+          <button id="btnStart">Start Wave</button>
+          <button id="btnSkip">Skip (+50G)</button>
+        </div>
+
+        <div class="sec">
+          <h3>Recruit</h3>
+          <div class="item"><span>🏹 Archer</span><button data-buy="archer">30G</button></div>
+          <div class="item"><span>🛡️ Knight</span><button data-buy="knight">50G</button></div>
+          <div class="item"><span>🧙‍♂️ Mage</span><button data-buy="mage">80G</button></div>
+          <div class="item"><span>🎯 Sniper</span><button data-buy="sniper">100G</button></div>
+        </div>
+
+        <div class="sec">
+          <h3>Upgrades</h3>
+          <div class="item"><span>💪 Damage +5</span><button data-up="damage">60G</button></div>
+          <div class="item"><span>⚡ Attack Speed</span><button data-up="speed">80G</button></div>
+          <div class="item"><span>🏰 Castle HP +50</span><button data-up="hp">100G</button></div>
+        </div>
+
+        <div class="sec">
+          <button id="btnReset" style="width:100%">🔄 Reset</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Game Over / Victory -->
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true">
+    <div class="card">
+      <h2 id="ovTitle">Game Over</h2>
+      <p id="ovText">Your castle has been destroyed.</p>
+      <p>Final Score: <span id="ovScore">0</span></p>
+      <p>Level Reached: <span id="ovLevel">1</span></p>
+      <button id="ovReplay" style="margin-top:12px">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+
+    /** ===========================
+     *  1) STATE & CONSTANTS
+     *  =========================== */
+    /** @type {HTMLCanvasElement} */
+    const cvs = document.getElementById("game");
+    const ctx = cvs.getContext("2d");
+
+    let gameState = {
+      money: 200,
+      baseHp: 100, maxBaseHp: 100,
+      score: 0,
+      currentWave: 1,
+      currentLevel: 1,
+      damageBonus: 0,
+      attackSpeedBonus: 0,
+      enemies: [],
+      units: [],
+      projectiles: [],
+      particles: [],
+      waveActive: false,
+      waveProgress: 0,      // 0..100
+      maxEnemiesPerWave: 10,
+      gameTime: 0,
+      gameRunning: true,
+      waveTotal: 0
+    };
+
+    // Timers for spawns
+    let spawnTimers = [];
+    let pendingSpawns = 0;
+
+    const unitTypes = {
+      archer: { cost:30, hp:60, damage:12, range:200, attackRate:1.5, color:"#2ecc71", weapon:"bow" },
+      knight: { cost:50, hp:120, damage:20, range:50, attackRate:0.8, color:"#3498db", weapon:"sword" },
+      mage:   { cost:80, hp:40, damage:25, range:250, attackRate:2.0, color:"#9b59b6", weapon:"staff" },
+      sniper: { cost:100,hp:50, damage:50, range:400, attackRate:0.5, color:"#f39c12", weapon:"rifle" }
+    };
+
+    const enemyTypes = {
+      basic:{ name:"Basic", hp:50, speed:1.0, damage:15, reward:20, color:"#e74c3c", size:1 },
+      fast: { name:"Fast",  hp:30, speed:2.5, damage:10, reward:25, color:"#f39c12", size:0.8 },
+      tank: { name:"Tank",  hp:150,speed:0.5, damage:30, reward:50, color:"#8e44ad", size:1.3 },
+      flying:{name:"Flying",hp:40, speed:1.5, damage:12, reward:30, color:"#16a085", size:0.9, flying:true }
+    };
+
+    const bossTypes = {
+      giant:  { name:"Giant Boss",  hp:500, speed:0.3, damage:50, reward:200, color:"#c0392b", size:2 },
+      wizard: { name:"Wizard Boss", hp:300, speed:0.8, damage:40, reward:250, color:"#6c5ce7", size:1.5, special:"teleport" },
+      dragon: { name:"Dragon Boss", hp:800, speed:1.0, damage:60, reward:400, color:"#d63031", size:2.5, flying:true, special:"firebreath" }
+    };
+
+    const levels = [
+      { name:"Green Plains",     waves:5,  enemyTypes:["basic","fast"],             background:["#87CEEB","#98FB98"], boss:null },
+      { name:"Dark Forest",      waves:8,  enemyTypes:["basic","fast","tank"],      background:["#2d3436","#00b894"], boss:"giant" },
+      { name:"Haunted Swamp",    waves:10, enemyTypes:["basic","fast","tank","flying"], background:["#636e72","#00cec9"], boss:"wizard" },
+      { name:"Volcanic Wasteland",waves:12,enemyTypes:["fast","tank","flying"],    background:["#2d3436","#e17055"], boss:"dragon" },
+      { name:"Crystal Caves",    waves:15, enemyTypes:["basic","fast","tank","flying"], background:["#74b9ff","#a29bfe"], boss:"giant" }
+    ];
+
+    /** ===========================
+     *  2) UTILS
+     *  =========================== */
+    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+    function rand(min,max){return Math.random()*(max-min)+min;}
+    function createParticles(x,y,color,count=8){
+      for(let i=0;i<count;i++){
+        gameState.particles.push({x,y,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,life:30,color});
+      }
+    }
+
+    /** ===========================
+     *  3) DRAW HELPERS
+     *  =========================== */
+    function drawBackground(){
+      const lvl = levels[gameState.currentLevel-1] || levels[0];
+      const g = ctx.createLinearGradient(0,0,0,cvs.height);
+      g.addColorStop(0, lvl.background[0]);
+      g.addColorStop(1, lvl.background[1]);
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,cvs.width,cvs.height);
+    }
+
+    function drawCastle(){
+      ctx.fillStyle='#8B4513';
+      ctx.fillRect(0, cvs.height-120, 180, 120);
+      ctx.fillStyle='#654321';
+      ctx.fillRect(20, cvs.height-150, 50, 40);
+      ctx.fillRect(110, cvs.height-150, 50, 40);
+    }
+
+    function drawStickFigure(x,y,color,size=1){
+      ctx.save();
+      ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2*size; ctx.lineCap='round';
+      const head=6*size, body=25*size, arm=12*size, leg=15*size;
+      ctx.beginPath(); ctx.arc(x,y,head,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x,y+head); ctx.lineTo(x,y+head+body); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x,y+head+body*.4); ctx.lineTo(x-arm,y+head+body*.6);
+      ctx.moveTo(x,y+head+body*.4); ctx.lineTo(x+arm,y+head+body*.6); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x,y+head+body); ctx.lineTo(x-arm*.8,y+head+body+leg);
+      ctx.moveTo(x,y+head+body); ctx.lineTo(x+arm*.8,y+head+body+leg); ctx.stroke();
+      ctx.restore();
+    }
+
+
+    /** ===========================
+     *  4) CORE LOOP
+     *  =========================== */
+    function updateGame(){
+      if(!gameState.gameRunning) return;
+      gameState.gameTime += 16; // ~60fps tick
+
+      ctx.clearRect(0,0,cvs.width,cvs.height);
+      drawBackground();
+      drawCastle();
+
+      // Units
+      gameState.units.forEach(u=>{
+        drawStickFigure(u.x, u.y, u.color, 1);
+        let target=null, distMin=Infinity;
+        for(const e of gameState.enemies){
+          const dx=e.x-u.x, dy=e.y-u.y, d=Math.hypot(dx,dy);
+          if(d<u.range && d<distMin){distMin=d; target=e;}
+        }
+        const interval=1000/(u.attackRate*(1+gameState.attackSpeedBonus));
+        if(target && gameState.gameTime - u.lastAttackTime >= interval){
+          const dmg=u.damage + gameState.damageBonus;
+          if(u.weapon==='sword' && distMin<u.range){
+            target.hp -= dmg;
+            createParticles(target.x,target.y,u.color);
+            if(target.hp<=0 && !target._dead){
+              gameState.money+=target.reward; gameState.score+=target.reward*5; target._dead=true; createParticles(target.x,target.y,'#fff',12);
+            }
+          }else{
+            const ang=Math.atan2(target.y-u.y, target.x-u.x);
+            gameState.projectiles.push({x:u.x,y:u.y,vx:Math.cos(ang)*5,vy:Math.sin(ang)*5,damage:dmg,color:u.color,radius:3,fromEnemy:false});
+          }
+          u.lastAttackTime=gameState.gameTime;
+        }
+      });
+
+      // Enemies
+      gameState.enemies.forEach(e=>{
+        e.x -= e.speed;
+        drawStickFigure(e.x, e.y, e.color, e.size);
+        let targetUnit=null, dm=Infinity;
+        for(const u of gameState.units){
+          const dx=u.x-e.x, dy=u.y-e.y, d=Math.hypot(dx,dy);
+          if(d<30 && d<dm){dm=d; targetUnit=u;}
+        }
+        if(targetUnit && gameState.gameTime - e.lastAttackTime >=1000){
+          targetUnit.hp -= e.damage;
+          e.lastAttackTime=gameState.gameTime;
+          createParticles(targetUnit.x,targetUnit.y,e.color);
+        }else if(e.x<=180 && gameState.gameTime - e.lastAttackTime >=1000){
+          damageCastle(e.damage);
+          e.lastAttackTime=gameState.gameTime;
+          createParticles(100,cvs.height-140,e.color);
+        }
+        if(e.special==='teleport' && gameState.gameTime - e.lastSpecialTime >=3000){
+          e.x -= rand(80,150);
+          e.lastSpecialTime=gameState.gameTime;
+        }
+        if(e.special==='firebreath' && gameState.gameTime - e.lastSpecialTime >=3000){
+          for(let i=0;i<5;i++){
+            const target = gameState.units[i % gameState.units.length] || {x:80,y:cvs.height-140};
+            const ang=Math.atan2(target.y-e.y, target.x-e.x);
+            gameState.projectiles.push({x:e.x,y:e.y,vx:Math.cos(ang)*4,vy:Math.sin(ang)*4,damage:e.damage,color:'#ff4500',radius:5,fromEnemy:true});
+          }
+          e.lastSpecialTime=gameState.gameTime;
+        }
+      });
+
+      // Projectiles
+      gameState.projectiles.forEach(p=>{
+        p.x+=p.vx; p.y+=p.vy;
+        ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.radius||3,0,Math.PI*2); ctx.fill();
+        if(p.fromEnemy){
+          for(const u of gameState.units){
+            const d=Math.hypot(p.x-u.x,p.y-u.y);
+            if(d<10){u.hp-=p.damage; p._hit=true; createParticles(u.x,u.y,p.color); break;}
+          }
+          if(!p._hit && p.x<180){damageCastle(p.damage); p._hit=true;}
+        }else{
+          for(const e of gameState.enemies){
+            const d=Math.hypot(p.x-e.x,p.y-e.y);
+            if(d<e.size*12){
+              e.hp-=p.damage; p._hit=true; createParticles(e.x,e.y,p.color);
+              if(e.hp<=0 && !e._dead){gameState.money+=e.reward; gameState.score+=e.reward*5; e._dead=true; createParticles(e.x,e.y,'#fff',12);} 
+              break;
+            }
+          }
+        }
+      });
+
+      // Particles
+      gameState.particles.forEach(pt=>{
+        pt.vy+=0.1; pt.x+=pt.vx; pt.y+=pt.vy; pt.life--; ctx.fillStyle=pt.color; ctx.fillRect(pt.x,pt.y,2,2);
+      });
+
+      // Cleanup
+      gameState.units = gameState.units.filter(u=>u.hp>0);
+      gameState.enemies = gameState.enemies.filter(e=>e.hp>0 && e.x>=-50);
+      gameState.projectiles = gameState.projectiles.filter(p=>!p._hit && p.x>-50 && p.x<cvs.width+50 && p.y>-50 && p.y<cvs.height+50);
+      gameState.particles = gameState.particles.filter(pt=>pt.life>0);
+
+      if(gameState.waveActive && gameState.waveTotal>0){
+        const remaining = pendingSpawns + gameState.enemies.length;
+        gameState.waveProgress = clamp((gameState.waveTotal - remaining)/gameState.waveTotal*100,0,100);
+      }else gameState.waveProgress=0;
+
+      checkWaveComplete();
+      updateUI();
+    }
+
+    function gameLoop(){
+      updateGame();
+      requestAnimationFrame(gameLoop);
+    }
+
+    /** ===========================
+     *  5) WAVE MANAGEMENT
+     *  =========================== */
+    function clearSpawns(){
+      spawnTimers.forEach(t=>clearTimeout(t));
+      spawnTimers.length = 0;
+      pendingSpawns = 0;
+    }
+
+    function spawnEnemy(){
+      const lvl = levels[gameState.currentLevel-1];
+      const typeName = lvl.enemyTypes[Math.floor(Math.random()*lvl.enemyTypes.length)];
+      const base = enemyTypes[typeName];
+      const mult = 1 + (gameState.currentWave-1)*0.2;
+      const y = base.flying ? rand(200,300) : cvs.height - 120;
+      gameState.enemies.push({
+        x:cvs.width+50, y,
+        maxHp:base.hp*mult, hp:base.hp*mult,
+        speed:base.speed, damage:base.damage, reward:base.reward,
+        size:base.size, flying:!!base.flying, color:base.color,
+        type:typeName, lastAttackTime:0, lastSpecialTime:0
+      });
+    }
+
+    function spawnBoss(){
+      const lvl = levels[gameState.currentLevel-1];
+      if(!lvl.boss) return;
+      const b = bossTypes[lvl.boss];
+      const scale = 1 + (gameState.currentLevel-1)*0.5;
+      const y = b.flying ? 200 : cvs.height - 150;
+      gameState.enemies.push({
+        x:cvs.width+100, y,
+        maxHp:b.hp*scale, hp:b.hp*scale,
+        speed:b.speed, damage:b.damage, reward:b.reward,
+        size:b.size, flying:!!b.flying, color:b.color,
+        type:lvl.boss, special:b.special, lastAttackTime:0, lastSpecialTime:0
+      });
+      const hint=document.getElementById('bossHint');
+      hint.textContent='⚠️ BOSS INCOMING!';
+      setTimeout(()=>{hint.textContent='';},3000);
+    }
+
+    function startWave(){
+      if(gameState.waveActive) return;
+      gameState.waveActive = true;
+      gameState.waveProgress = 0;
+      const lvl = levels[gameState.currentLevel-1];
+      const enemiesThisWave = gameState.maxEnemiesPerWave + Math.floor(gameState.currentWave*1.5);
+      const hasBoss = gameState.currentWave===lvl.waves && lvl.boss;
+      pendingSpawns = enemiesThisWave + (hasBoss?1:0);
+      gameState.waveTotal = pendingSpawns;
+      for(let i=0;i<enemiesThisWave;i++){
+        const t=setTimeout(()=>{spawnEnemy(); pendingSpawns--;}, i*800);
+        spawnTimers.push(t);
+      }
+      if(hasBoss){
+        const t=setTimeout(()=>{spawnBoss(); pendingSpawns--;}, enemiesThisWave*800 + 2000);
+        spawnTimers.push(t);
+      }
+    }
+
+    function checkWaveComplete(){
+      if(gameState.waveActive && pendingSpawns===0 && gameState.enemies.length===0){
+        gameState.waveActive=false;
+        gameState.money += 100 + gameState.currentWave*10;
+        gameState.score += 1000;
+        nextWave();
+        updateLevelInfo();
+      }
+    }
+
+    function nextWave(){
+      const lvl = levels[gameState.currentLevel-1];
+      if(gameState.currentWave >= lvl.waves){
+        if(gameState.currentLevel < levels.length){
+          gameState.currentLevel++;
+          gameState.currentWave = 1;
+          gameState.money += 200; // bonus qua level
+          updateLevelInfo();
+        }else{
+          showGameOver(true);
+        }
+      }else{
+        gameState.currentWave++;
+        updateLevelInfo();
+      }
+    }
+
+    /** ===========================
+     *  6) ACTIONS
+     *  =========================== */
+    function buyUnit(type){
+      const data = unitTypes[type];
+      if(!data) return;
+      if(gameState.money < data.cost || gameState.units.length>=8) return;
+      gameState.money -= data.cost;
+      gameState.units.push({
+        x:100 + gameState.units.length*40,
+        y:cvs.height - 140,
+        type,
+        hp:data.hp, maxHp:data.hp,
+        damage:data.damage, range:data.range, attackRate:data.attackRate,
+        color:data.color, weapon:data.weapon,
+        lastAttackTime:0
+      });
+      updateUI();
+    }
+
+    function upgradeStat(kind){
+      if(kind==='damage' && gameState.money>=60){
+        gameState.money-=60; gameState.damageBonus+=5;
+      }else if(kind==='speed' && gameState.money>=80){
+        gameState.money-=80; gameState.attackSpeedBonus+=0.2;
+      }else if(kind==='hp' && gameState.money>=100){
+        gameState.money-=100; gameState.maxBaseHp+=50; gameState.baseHp = Math.min(gameState.baseHp+50, gameState.maxBaseHp);
+      }
+      updateUI();
+    }
+
+    let castleIFrameUntil = 0;
+    function damageCastle(dmg){
+      if(gameState.gameTime < castleIFrameUntil) return;
+      gameState.baseHp = clamp(gameState.baseHp - dmg, 0, gameState.maxBaseHp);
+      castleIFrameUntil = gameState.gameTime + 200;
+      if(gameState.baseHp===0) showGameOver(false);
+    }
+
+    function showGameOver(victory=false){
+      gameState.gameRunning = false;
+      clearSpawns();
+      document.getElementById("ovTitle").textContent = victory ? "Victory!" : "Game Over!";
+      document.getElementById("ovText").textContent  = victory ? "You defended all territories." : "Your castle has been destroyed.";
+      document.getElementById("ovScore").textContent = gameState.score;
+      document.getElementById("ovLevel").textContent = gameState.currentLevel;
+      document.getElementById("overlay").style.display = "flex";
+    }
+
+    function resetGame(){
+      clearSpawns();
+      gameState = {
+        money:200, baseHp:100, maxBaseHp:100, score:0,
+        currentWave:1, currentLevel:1,
+        damageBonus:0, attackSpeedBonus:0,
+        enemies:[], units:[], projectiles:[], particles:[],
+        waveActive:false, waveProgress:0, maxEnemiesPerWave:10,
+        gameTime:0, gameRunning:true, waveTotal:0
+      };
+      castleIFrameUntil = 0;
+      document.getElementById("overlay").style.display = "none";
+      updateLevelInfo();
+      updateUI();
+    }
+
+    /** ===========================
+     *  7) UI BINDING
+     *  =========================== */
+    function updateLevelInfo(){
+      const lvl = levels[gameState.currentLevel-1];
+      document.getElementById("levelName").textContent = lvl.name;
+      document.getElementById("levelWaveCur").textContent = gameState.currentWave;
+      document.getElementById("levelWaveMax").textContent = lvl.waves;
+      document.getElementById("bossHint").textContent = (lvl.boss && gameState.currentWave===lvl.waves) ? "⚠️ BOSS INCOMING!" : "";
+    }
+
+    function updateUI(){
+      document.getElementById("hudWave").textContent  = gameState.currentWave;
+      document.getElementById("hudLevel").textContent = gameState.currentLevel;
+      document.getElementById("hudGold").textContent  = gameState.money;
+      document.getElementById("hudHp").textContent    = `${gameState.baseHp}/${gameState.maxBaseHp}`;
+      document.getElementById("hudScore").textContent = gameState.score;
+
+      document.getElementById("statGold").textContent  = gameState.money;
+      document.getElementById("statHp").textContent    = `${gameState.baseHp}/${gameState.maxBaseHp}`;
+      document.getElementById("statScore").textContent = gameState.score;
+      document.getElementById("statEnemies").textContent = gameState.enemies.length;
+
+      document.getElementById("waveBar").style.width = `${gameState.waveProgress}%`;
+    }
+
+    document.getElementById("btnStart").addEventListener("click", startWave);
+    document.getElementById("btnSkip").addEventListener("click", ()=>{ if(!gameState.waveActive){ gameState.money+=50; nextWave(); }});
+    document.getElementById("btnReset").addEventListener("click", resetGame);
+    document.getElementById("ovReplay").addEventListener("click", resetGame);
+
+    document.querySelectorAll("[data-buy]").forEach(btn=>{
+      btn.addEventListener("click", ()=> buyUnit(btn.getAttribute("data-buy")));
+    });
+    document.querySelectorAll("[data-up]").forEach(btn=>{
+      btn.addEventListener("click", ()=> upgradeStat(btn.getAttribute("data-up")));
+    });
+
+    cvs.addEventListener("click",(ev)=>{
+      const rect=cvs.getBoundingClientRect();
+      const x=ev.clientX-rect.left;
+      const y=ev.clientY-rect.top;
+      if(x<500 && y>cvs.height-200 && y<cvs.height-50){
+        let nearest=null, dmin=Infinity;
+        for(const u of gameState.units){
+          const d=Math.hypot(u.x-x,u.y-y);
+          if(d<dmin){dmin=d; nearest=u;}
+        }
+        if(nearest){
+          nearest.x=clamp(x,20,500);
+          nearest.y=cvs.height-140;
+        }
+      }
+    });
+
+    document.addEventListener("keydown",(e)=>{
+      switch(e.key){
+        case " ": e.preventDefault(); startWave(); break;
+        case "s": e.preventDefault(); if(!gameState.waveActive){ gameState.money+=50; nextWave(); } break;
+        case "1": e.preventDefault(); buyUnit("archer"); break;
+        case "2": e.preventDefault(); buyUnit("knight"); break;
+        case "3": e.preventDefault(); buyUnit("mage"); break;
+        case "4": e.preventDefault(); buyUnit("sniper"); break;
+        case "r": e.preventDefault(); resetGame(); break;
+      }
+    });
+
+    /** ===========================
+     *  8) INIT
+     *  =========================== */
+    function init(){
+      updateLevelInfo();
+      updateUI();
+      gameLoop();
+    }
+    init();
+  </script>
+</body>
+</html>
